@@ -87,8 +87,6 @@ void ReadEdgeStatus(int32_t handle, uint32_t addr);
 void ReadHTStatus(int32_t handle, uint32_t addr);
 uint16_t ReadEventFIFOStatus(int32_t handle, uint32_t addr);
 void EnableEventFIFO(int32_t handle, uint32_t addr);
-uint16_t ReadStoredEvents(int32_t handle, uint32_t addr);
-void SetStoredEvents(int32_t handle, uint32_t addr,uint16_t data);
 
 // V1290N OPCODEs //
 enum V1290N_OPCODE{
@@ -129,37 +127,15 @@ enum V1290N_ADDR{
 	cv1290Buffer = 0x0000,
 	cv1290ControlReg = 0x1000,
 	cv1290StatReg		  = 0x1002,// Status Register, ro, D16
-	cv1290IrLvl				= 0x100A,// Interrupt Level, r/w, D16
-	cv1290IrVec        = 0x100C,// Interrupt Vector, r/w, D16
-	cv1290AddrHigh		  = 0x1012,// ADER High, r/w, D16
 	cv1290ModuleReset			= 0x1014,//  wo, D16
 	cv1290Clear				= 0x1016,//   Software Clear, wo, D16
 	cv1290SWTrigger			= 0x101A,// Software Trigger wo, D16
 	cv1290EvtCnt			= 0x101C,// Event Counter ro, D16
-	cv1290EvtStored	  = 0x1020,// Event Stored ro,Number of Evt in buffer, D16
 	cv1290AlmostFullLevel	  = 0x1022,
 	cv1290BLTEvtNumber	  = 0x1024,
 	cv1290FIFOStat		= 0x103E,// Event FIFO Status Register, ro, D16
 
 
-	cv1290IncEvt			  = 0x1028,// Increment Event, wo, D16
-	cv1290Controller			  = 0x1030,// Increment Event, wo, D16
-	cv1290IncOff			  = 0x102A,// Increment Offset, wo, D16
-	cv1290LdTestReg		= 0x102C,// Load Test Register, r/w, D16
-	cv1290FclrWindow	  = 0x102E,// Fast Clear Window, r/w, D16
-	cv1290BitSet2			= 0x1032,// Bit Set 2, r/w, D16
-	cv1290BitClr2			= 0x1034,// Bit Clear 2, wo, D16
-	cv1290WmemTestAddr = 0x1036,// W Memory Test Address, wo, D16
-	cv1290MemTestWrdH	= 0x1038,// Memory Test Word_High, wo, D16
-	cv1290MemTestWrdL	= 0x103A,// Memory Test Word_Low, wo, D16
-	cv1290CrateSel		  = 0x103C,// Crate Selection, r/w, D16
-	cv1290EvtCntRst		= 0x1040,// Event Counter Reset, wo, D16
-	cv1290Fsr				  = 0x1060,// Fulll Scale Range, r/w, D16
-	cv1290RtestAddr		= 0x1064,// R Test Address, wo, D16
-	cv1290SwComm			  = 0x1068,// SW Comm, wo, D16
-	cv1290AAD					= 0x1070,// ADD, ro, D16
-	cv1290BAD					= 0x1072,// BAD, ro, D16
-	cv1290Thresh			  = 0x1080,// Thresholds, r/w, D16
 	// ROM address map(all read-only)
 	cv1290OuiMsb       = 0x8026,// Manufacturer Identifier
 	cv1290Oui          = 0x802A,// Manufacturer Identifier

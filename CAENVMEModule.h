@@ -1,3 +1,6 @@
+/*
+Mother class for VME Modules.
+*/
 #include "CAENVMEV1718.h"
 #ifndef VMEModule_h
 #define VMEModule_h 1

@@ -3,7 +3,7 @@
 
 	-----------------------------------------------------------------------------
 
-	test_daq.c
+	daq.c
 
 	-----------------------------------------------------------------------------
 
@@ -12,7 +12,8 @@ Hyunmin Yang, HANUL, korea Univerisity
 	Simple DAQ program of V792N controlled by V1718 USB-Bridge interface.
 Modified: May 2022
 Byungmin Kang, HANUL, korea university
-	V1290 TDC control is available, and data is transfered by block.
+	V1290 TDC control is available
+	data is read by block to accelate readout.
 
 -----------------------------------------------------------------------------
 */
@@ -177,7 +178,7 @@ int main(int argc, char **argv)
 			TDCBlock[j]=0;
 		}
 		*/
-		int nb = v792[0].ReadBLT(QDCBlockSize,QDCBlock);
+		int nb = v792[0].ReadBLT(QDCBlockSize,QDCBlock);//Block Level Transfer
 //		cout<<"QDC nb : " <<nb<<endl;
 		for(int j = 0;j < nQdcCh1 +2;j++) // header + 16 channels + EOB
 		{

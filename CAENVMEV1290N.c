@@ -1,3 +1,17 @@
+/*!
+	-----------------------------------------------------------------------------
+
+	-----------------------------------------------------------------------------
+
+	CAENVMEV1290N.c
+
+	-----------------------------------------------------------------------------
+
+Created: April 2022
+Byungmin Kang, HANUL, korea Univerisity
+Functions for V1290N
+-----------------------------------------------------------------------------
+*/
 #include "CAENVMEV1718.h"
 #include "CAENVMEV1290N.h"
 #include "unistd.h"
@@ -215,10 +229,4 @@ void EnableEventFIFO(int32_t handle, uint32_t addr){
 	data = data | (0x0001 << 8 );
 	//	uint16_t enfifo = 0x100;//100000000
 	CvWrite16(handle, addr+cv1290ControlReg,data);
-}
-uint16_t ReadStoredEvents(int32_t handle, uint32_t addr){
-	return (CvRead16(handle, addr + cv1290EvtStored))&0x1f;	
-}
-void SetStoredEvents(int32_t handle, uint32_t addr , uint16_t data){
-	 CvWrite16(handle, addr + cv1290EvtStored,data);	
 }

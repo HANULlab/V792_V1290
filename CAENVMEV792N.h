@@ -10,7 +10,10 @@
         Created: January 2021
         Hyunmin Yang, HANUL, korea Univerisity
         Output buffer structure and memory map of V792N
-        -----------------------------------------------------------------------------
+				Modified: April 2021
+				Kang Byungmin, HANUL, Korea University
+				Organized in a class.	
+				-----------------------------------------------------------------------------
 */
 #ifndef __CAENVMEV792_H
 #define __CAENVMEV792_H
