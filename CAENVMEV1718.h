@@ -239,7 +239,6 @@ void CvStopPulser(int32_t handle, CVPulserSelect pulSel);
 
 
 
-//For V1290
 
 
 

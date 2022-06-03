@@ -34,11 +34,12 @@ Byungmin Kang, HANUL, korea university
 #include <unistd.h>
 #include <bitset>
 #include <vector>
-/*
-#include "CAENVMEoslib.h"
+#include <chrono>
+/* #include "CAENVMEoslib.h"
 #include "CAENVMEtypes.h
 */
 using namespace std;
+using namespace chrono;
 // global variables for a controller and modules
 int32_t ctlHdl;                    // controller handler
 short ctlIdx = 0;                  // controller slot index???
@@ -53,15 +54,20 @@ int min_int(int a,int b){
 }
 
 // definition of base addresses
-const uint32_t qdcBase1 = 0x20000000;    // base address of first QDC
-const uint32_t tdcBase1 = 0x11000000;    // base address of first TDC
+const uint32_t qdcAddr1 = 0x20000000;    // base address of first QDC
+const uint32_t tdcAddr1 = 0x11000000;    // base address of first TDC
 const uint16_t BLTAddress = 0xAA;
 // channel number
 const uint8_t nQdcCh1 = 16; 
 const uint8_t nTdcCh1 = 16; 
 
+CVPulserSelect pulser = cvPulserB;
+uint8_t Pulse_period = 0xff;
+uint8_t Pulse_width  = 0xff; 
+
 const int timeOut = 0;             // zero if no time out limit(in ms)  
 struct timeval tStart, tStop; 
+bool Force_flag = true;
 
 // to deal with ctrl + c signal
 // When ctrl + c is pressed to kill the process, IntHandler gets called
@@ -71,8 +77,6 @@ void IntHandler(int sig)
 {
 	printf("Quiting the program...\n");
 	isQuit = true;
-//	if (CvClose(ctlHdl) != cvSuccess)
-//		exit(0);
 }
 
 
@@ -91,6 +95,30 @@ CAENVMEV792N v792[nv792];
 int main(int argc, char **argv)
 {
 
+	switch(argc){
+		case 1:
+			{
+				cout<<"Usage: ./daq Filename Nevents"<<endl;
+				exit(1);
+				break;
+			}
+		case 2:
+			{
+				cout<<"Nevents set to 10000"<<endl;
+				break;
+			}
+		case 3:
+			{
+				nEvt = atoi(argv[2]);
+				break;
+			}
+		defalut:
+			{
+				cout<<"Too much arguments; others will be neglected"<<endl;
+				break;
+			}
+	}
+
 
 	// CvClose must be called before the end of the program!!!
 	// interrupt signal(ctrl + c)
@@ -99,8 +127,8 @@ int main(int argc, char **argv)
 	if (CvInit(ctlIdx, &ctlHdl) != cvSuccess)
 		exit(0);
 	// Initializing modules
-	v792[0].SetAddress(ctlHdl,qdcBase1);
-	v1290[0].SetAddress(ctlHdl,tdcBase1);
+	v792[0].SetAddress(ctlHdl,qdcAddr1);
+	v1290[0].SetAddress(ctlHdl,tdcAddr1);
 	InitModules();
 	printf("Modules Initialized\n"); 
 	// acqusition loop
@@ -111,19 +139,23 @@ int main(int argc, char **argv)
 	int32_t tdc1[16];
 	uint32_t qdcBuf1;
 	uint32_t tdcBuf1;
-	const int QDCBlockSize= 128;
-	uint32_t QDCBlock[QDCBlockSize];
+	const int QDCBlockSize= 128;//int 32 casted by char. Actual number of int32 blocks should be divided by 4.
+	uint32_t QDCBlock[QDCBlockSize/4];//Block will be casted to uchar, but this should be uint32_t, for data interpretation.
 
 	const int TDCBlockSize= 1024;
-	uint32_t TDCBlock[TDCBlockSize];
-	
+//	const int TDCBlockSize= 2048;
+//	const int TDCBlockSize= 4096;
+	uint32_t TDCBlock[TDCBlockSize/4];
+
 	FILE* fp;
-	nEvt = atoi(argv[2]);
 	std::string filename = argv[1];
 	string dir = "./dats/";
 	filename=dir+filename;
 	fp=fopen(filename.data(),"wb+");
 	std::cout<<"File Created : "<<filename<<std::endl;
+	FILE* fp_time;
+	filename=dir+"_timing";
+	fp_time=fopen(filename.data(),"wb+");
 	int32_t fheader = 0xffffffff;
 	int32_t ffooter = 0xfffffffe;
 
@@ -132,21 +164,21 @@ int main(int argc, char **argv)
 	printf("********************************************************************************************\n");
 	int32_t QDCevt_id=0,TDCevt_id=0;
 	int nerr = 0; 
+
+//	CvWrite16(ctlHdl,ctlHdl+0x0C,0xf801);
 	for(int32_t i = 0;i < nEvt;i++)//loop
 	{
 		if(isQuit)
 			break;
 		while(i==0){
 			ClearModules();
-			uint16_t qdc_clear=(uint16_t)v792[0].ReadStoredEvents();
 			uint16_t tdc_clear=(uint16_t)v1290[0].ReadStoredEvents();
-			if(tdc_clear==0&&qdc_clear==0){
+			if(tdc_clear==0){
 				std::cout<<"Cleared "<<std::endl;
 				break;
 			}
 			else{
 				std::cout<<"Clearing..."<<std::endl;
-				std::cout<<"QDC nev = "<<qdc_clear<<std::endl;
 				std::cout<<"TDC nev = "<<tdc_clear<<std::endl;
 			}	
 			if(isQuit){
@@ -156,9 +188,10 @@ int main(int argc, char **argv)
 
 		if(!WaitModules())
 		{
-			printf("WaitModules Timeout!\n");
+			printf("WaitModules Failure!\n");
 			break;
 		}
+		system_clock::time_point start_time = system_clock::now(); 
 		// Output Register controll to trigger veto logic
 
 		// QDC1 module data
@@ -170,22 +203,22 @@ int main(int argc, char **argv)
 		{
 			tdc1[j] = -9999;
 		}
-		/*
-		for(int j=0;j<QDCBlockSize;j++){
-			QDCBlock[j]=0;
-		}
-		for(int j=0;j<TDCBlockSize;j++){
-			TDCBlock[j]=0;
-		}
-		*/
-		int nb = v792[0].ReadBLT(QDCBlockSize,QDCBlock);//Block Level Transfer
+		
+//		CvStartPulser(ctlHdl,pulser,Pulse_period,Pulse_width);
+	
+
+		int nbq = v792[0].ReadBLT(QDCBlockSize,QDCBlock);//Block Level Transfer
+		system_clock::time_point QDCread_time = system_clock::now(); 
+		int nbt = v1290[0].ReadBLT(TDCBlockSize,TDCBlock);
+		system_clock::time_point TDCread_time = system_clock::now(); 
+//		CvStopPulser(ctlHdl,pulser);
 //		cout<<"QDC nb : " <<nb<<endl;
 		for(int j = 0;j < nQdcCh1 +2;j++) // header + 16 channels + EOB
 		{
 			qdcBuf1 = QDCBlock[j];
 			switch((qdcBuf1>>24) & 0x07) // check output buffer type
 			{
-				case 0x04: // EOB
+				case 0x04: // EOB endofblock
 					{
 						QDCevt_id = (qdcBuf1&0xFFFFFF);
 					}
@@ -218,12 +251,11 @@ int main(int argc, char **argv)
 		//	for(int j = 0;j < 15;j++) // 16 channels 
 		int j=0;
 		int bunch_id = 0;
-		nb = v1290[0].ReadBLT(TDCBlockSize,TDCBlock);
-		while(TDC_events&&j<256)
+		while(TDC_events&&j<255)
 		{
-			for(int k=0;k<32;k++){
-				std::bitset<32> x(TDCBlock[k]);
-			}
+//			for(int k=0;k<32;k++){
+		//		std::bitset<32> x(TDCBlock[k]);
+//			}
 			tdcBuf1=TDCBlock[j];	
 			j++;
 			switch(((tdcBuf1>>27)&(0x1f))  )// check output buffer type
@@ -290,8 +322,8 @@ int main(int argc, char **argv)
 					{
 						//						printf("Warning, an invalid TDC datum has been detected!\n");
 					}
-					if(j==255){
-						std::cout<<"Warning: 256 TDC loop"<<std::endl;
+					if(j==254){
+						std::cout<<"Warning: TDC loop reached 255"<<std::endl;
 					}
 			}//Switch
 		}//while(TDC_events)
@@ -310,7 +342,9 @@ int main(int argc, char **argv)
 			std::cout<<"QDC Evt: "<<QDCevt_id<<std::endl;
 			std::cout<<"MissMatch : "<<nerr<<std::endl;
 		}
+		system_clock::time_point end_time = system_clock::now(); 
 		fwrite(&fheader,sizeof (int32_t),1, fp);
+		fwrite(&fheader,sizeof (int32_t),1, fp_time);
 		fwrite(&i,sizeof (int32_t),1, fp);
 		int32_t QDCHeader = 0xFFFFFFF0;
 		fwrite(&QDCHeader,sizeof (int32_t),1, fp);
@@ -325,6 +359,27 @@ int main(int argc, char **argv)
 			fwrite(&tdc1[nch],sizeof (int32_t),1, fp);
 		}
 		fwrite(&ffooter,sizeof (int32_t),1, fp);
+		fwrite(&ffooter,sizeof (int32_t),1, fp_time);
+		system_clock::time_point write_time = system_clock::now();
+		nanoseconds qdcreading = QDCread_time-start_time;
+		nanoseconds tdcreading = TDCread_time-start_time;
+		nanoseconds ending = end_time-start_time;
+		nanoseconds writing = write_time-start_time;
+		uint32_t qt = qdcreading.count();
+		uint32_t tt= tdcreading.count();
+		uint32_t et= ending.count();
+		uint32_t wt= writing.count();
+		fwrite(&qt,sizeof (int32_t),1, fp_time);
+		fwrite(&tt,sizeof (int32_t),1, fp_time);
+		fwrite(&et,sizeof (int32_t),1, fp_time);
+		fwrite(&wt,sizeof (int32_t),1, fp_time);
+/*
+		cout<<"Elapsed_Time"<<endl;
+		cout<<"ReadingQDC : " <<qt<<" ns"<<endl;
+		cout<<"ReadingTDC : " <<tt<<" ns"<<endl;
+		cout<<"Ending : " <<et<<" ns"<<endl;
+		cout<<"Writing : " <<wt<<" ns"<<endl;
+	*/
 		//ClearModules();
 		//			std::cout<<"Time Difference : "<<(double)(tdc1[2]-tdc1[3])*0.025<<std::endl;
 		//			std::cout<<"QDC : "<<(double)(qdc1[2])<<std::endl;
@@ -332,6 +387,7 @@ int main(int argc, char **argv)
 	}
 	int32_t feof = 0xfffffffd;
 	fwrite(&feof,sizeof (int32_t),1, fp);
+	fwrite(&feof,sizeof (int32_t),1, fp_time);
 	std::cout<<"MissMatch : "<<nerr<<std::endl;
 	printf("********************************************************************************************\n");
 	printf("************************************ End of DAQ loop ***************************************\n");
@@ -344,6 +400,7 @@ int main(int argc, char **argv)
 	if (CvClose(ctlHdl) != cvSuccess)
 		exit(0);
 	fclose(fp);
+	fclose(fp_time);
 	std::cout<<"File Closed : "<<filename<<std::endl;
 	return 0;
 }
@@ -363,7 +420,7 @@ void InitModules()
 	v1290[0].SetRejectionMargin((unsigned short)0x27);
 	v1290[0].SetExtraSearchWindow((unsigned short)0x01);
 	v1290[0].SetTimeTagSubtraction(true);	
-	unsigned short mt = 5;//0->0, 1->1... 4->8...	8->128, 9->no limit
+	unsigned short mt = 6;//0->0, 1->1... 4->8...	8->128, 9->no limit
 	v1290[0].SetMultiplicity(mt);	
 	v1290[0].SetBLTNev(1);	
 	
@@ -395,14 +452,18 @@ bool WaitModules()//gate
 		adctrg = adcstat&0x0001;
 		adcbusy = (adcstat>>2)&0x0001;
 //		adcready = (!adcbusy && adctrg);	
-		adcready = (adctrg);	
+		adcready = (adctrg&&!adcbusy);	
 		tdcready = (v1290[0].IsReady());
+
+		if(v1290[0].ReadStoredEvents()>31){
+		}
+//		cout<<"V792 Evts: "<<v1290[0].ReadStoredEvents()<<endl;
 
 		if(adcbusy&&tdcready!=0x0001){
 		}
 		//adcready = (!adcbusy && adctrg);	
-
-		if(adcready==0x0001&&tdcready==0x0001)
+	
+		if(adcready==0x0001&&tdcready==0x0001&&Force_flag)
 			return true;
 		else if(adcready!=0x0001&&tdcready==0x0001){
 		}
@@ -412,9 +473,9 @@ bool WaitModules()//gate
 void ClearModules()//clr
 {
 	v1290[0].Clear();
-	CvWrite16(ctlHdl, qdcBase1 + cv792BitSet2, 0x001C);
+	CvWrite16(ctlHdl, qdcAddr1 + cv792BitSet2, 0x001C);
 	usleep(1);
-	CvWrite16(ctlHdl, qdcBase1 + cv792BitClr2, 0x8004);
+	CvWrite16(ctlHdl, qdcAddr1 + cv792BitClr2, 0x8004);
 	v792[0].EventReset();
 }
 void ResetTDC(){

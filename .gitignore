@@ -1,0 +1,4 @@
+*.o
+*.root
+*.bin
+*.exe
