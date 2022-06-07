@@ -84,13 +84,17 @@ void InitModules();
 bool WaitModules();
 void ClearModules();
 void ResetTDC();
-void PrintSummary(struct timeval tStart, struct timeval tStop, int nEvt);
+void PrintSummary();
 int nEvt = 10000;
 const int nv1290=10;
 const int nv792=10;
 CAENVMEV1290N v1290[nv1290];
 CAENVMEV792N v792[nv792];
-
+auto loop_time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()); 
+auto daq_start = duration_cast<seconds>(system_clock::now().time_since_epoch()); 
+auto daq_end = duration_cast<seconds>(system_clock::now().time_since_epoch()); 
+int timeout = 3000;//ms
+int event_counter=0;
 
 int main(int argc, char **argv)
 {
@@ -154,8 +158,8 @@ int main(int argc, char **argv)
 	fp=fopen(filename.data(),"wb+");
 	std::cout<<"File Created : "<<filename<<std::endl;
 	FILE* fp_time;
-	filename=dir+"_timing";
-	fp_time=fopen(filename.data(),"wb+");
+	std::string tfilename = filename+"_time";
+	fp_time=fopen(tfilename.data(),"wb+");
 	int32_t fheader = 0xffffffff;
 	int32_t ffooter = 0xfffffffe;
 
@@ -164,7 +168,6 @@ int main(int argc, char **argv)
 	printf("********************************************************************************************\n");
 	int32_t QDCevt_id=0,TDCevt_id=0;
 	int nerr = 0; 
-
 //	CvWrite16(ctlHdl,ctlHdl+0x0C,0xf801);
 	for(int32_t i = 0;i < nEvt;i++)//loop
 	{
@@ -175,6 +178,8 @@ int main(int argc, char **argv)
 			uint16_t tdc_clear=(uint16_t)v1290[0].ReadStoredEvents();
 			if(tdc_clear==0){
 				std::cout<<"Cleared "<<std::endl;
+				system_clock::time_point Start_time = system_clock::now(); 
+				daq_start = duration_cast<seconds>(system_clock::now().time_since_epoch()); 
 				break;
 			}
 			else{
@@ -186,11 +191,14 @@ int main(int argc, char **argv)
 			} 
 		}
 
+ 		loop_time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()); 
+		system_clock::time_point loop_time_ns = system_clock::now(); 
 		if(!WaitModules())
 		{
 			printf("WaitModules Failure!\n");
 			break;
 		}
+		event_counter++;
 		system_clock::time_point start_time = system_clock::now(); 
 		// Output Register controll to trigger veto logic
 
@@ -332,11 +340,11 @@ int main(int argc, char **argv)
 				nerr++;	
 //				cout<<"Warning! TDCevt : "<<TDCevt_id<<" QDCevt : "<<QDCevt_id<<endl;
 //				usleep(1);
-				ClearModules();
+//				ClearModules();
 				i--;
 				continue;
 		}
-		if(i%100==0){
+		if(i%1000==0){
 			std::cout<<i<<" th evt"<<std::endl;
 			std::cout<<"TDC Evt: "<<TDCevt_id<<std::endl;
 			std::cout<<"QDC Evt: "<<QDCevt_id<<std::endl;
@@ -361,39 +369,49 @@ int main(int argc, char **argv)
 		fwrite(&ffooter,sizeof (int32_t),1, fp);
 		fwrite(&ffooter,sizeof (int32_t),1, fp_time);
 		system_clock::time_point write_time = system_clock::now();
+		nanoseconds start = start_time-loop_time_ns;
 		nanoseconds qdcreading = QDCread_time-start_time;
 		nanoseconds tdcreading = TDCread_time-start_time;
 		nanoseconds ending = end_time-start_time;
 		nanoseconds writing = write_time-start_time;
+		uint32_t lt = start.count();
 		uint32_t qt = qdcreading.count();
 		uint32_t tt= tdcreading.count();
 		uint32_t et= ending.count();
 		uint32_t wt= writing.count();
+		fwrite(&lt,sizeof (int32_t),1, fp_time);
 		fwrite(&qt,sizeof (int32_t),1, fp_time);
 		fwrite(&tt,sizeof (int32_t),1, fp_time);
 		fwrite(&et,sizeof (int32_t),1, fp_time);
 		fwrite(&wt,sizeof (int32_t),1, fp_time);
-/*
+		/*
 		cout<<"Elapsed_Time"<<endl;
 		cout<<"ReadingQDC : " <<qt<<" ns"<<endl;
 		cout<<"ReadingTDC : " <<tt<<" ns"<<endl;
 		cout<<"Ending : " <<et<<" ns"<<endl;
 		cout<<"Writing : " <<wt<<" ns"<<endl;
-	*/
+		*/
 		//ClearModules();
 		//			std::cout<<"Time Difference : "<<(double)(tdc1[2]-tdc1[3])*0.025<<std::endl;
 		//			std::cout<<"QDC : "<<(double)(qdc1[2])<<std::endl;
 		//		std::cout<<"End Of Event "<<i<<" QDCID: "<< QDCevt_id<<" TDCID: "<<TDCevt_id <<std::endl;
 	}
+	daq_end = duration_cast<seconds>(system_clock::now().time_since_epoch()); 
 	int32_t feof = 0xfffffffd;
 	fwrite(&feof,sizeof (int32_t),1, fp);
 	fwrite(&feof,sizeof (int32_t),1, fp_time);
+	
+	seconds elapsed_time = daq_end-daq_start;
+	int32_t elapsedtime=elapsed_time.count();
+	int32_t nevt = event_counter;	
+	fwrite(&elapsedtime,sizeof (int32_t),1, fp);
+	fwrite(&nevt,sizeof (int32_t),1, fp);
 	std::cout<<"MissMatch : "<<nerr<<std::endl;
 	printf("********************************************************************************************\n");
 	printf("************************************ End of DAQ loop ***************************************\n");
 	printf("************************************ Summary         ***************************************\n");
 	//  gettimeofday(&tStop, NULL);
-	// PrintSummary(tStart, tStop, nEvt);
+	PrintSummary();
 	printf("********************************************************************************************\n");
 	// closing V1718
 	ClearModules();
@@ -435,6 +453,7 @@ void InitModules()
 
 bool WaitModules()//gate
 {
+
 	struct timeval tPrev, tNew;
 	uint16_t adcstat = 0;
 	bool adcready = false;
@@ -444,18 +463,29 @@ bool WaitModules()//gate
 	uint16_t tdcready = 0;
 	while(true)
 	{
+		//system_clock::time_point wait_times = duration_cast<milliseconds>(system_clock::now()); 
+		auto wait_times = duration_cast<milliseconds>(system_clock::now().time_since_epoch()); 
+		milliseconds wait_time=wait_times-loop_time;
+		int waittime=wait_time.count();
 		if(isQuit){
 			ResetTDC();
 			return false;
-		} 
+		}
+		if(waittime>timeout){
+			ClearModules();
+			cout<<"TimeOut! Modules cleared"<<endl;
+ 			loop_time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()); 
+		}
 		adcstat = v792[0].GetStatRegister();
 		adctrg = adcstat&0x0001;
 		adcbusy = (adcstat>>2)&0x0001;
 //		adcready = (!adcbusy && adctrg);	
-		adcready = (adctrg&&!adcbusy);	
+	//	adcready = (adctrg&&!adcbusy);	
+		adcready = (adctrg);	
 		tdcready = (v1290[0].IsReady());
 
-		if(v1290[0].ReadStoredEvents()>31){
+		if(v1290[0].ReadStoredEvents()>32&&adcbusy){
+			ClearModules();
 		}
 //		cout<<"V792 Evts: "<<v1290[0].ReadStoredEvents()<<endl;
 
@@ -474,7 +504,6 @@ void ClearModules()//clr
 {
 	v1290[0].Clear();
 	CvWrite16(ctlHdl, qdcAddr1 + cv792BitSet2, 0x001C);
-	usleep(1);
 	CvWrite16(ctlHdl, qdcAddr1 + cv792BitClr2, 0x8004);
 	v792[0].EventReset();
 }
@@ -484,26 +513,16 @@ void ResetTDC(){
 }
 
 
-void PrintSummary(struct timeval tStart, struct timeval tStop, int nEvt)
+void PrintSummary()
 {
-	int msec = (int)(tStop.tv_usec - tStart.tv_usec)/1000;
-	if(msec < 0)
-		msec += 1000;
-	int sec = tStop.tv_sec - tStart.tv_sec;
-	if(tStop.tv_usec < tStart.tv_usec)
-		sec--;
-	int min = (int)(sec/60)%60;
-	int h = (int)(sec/3600)%24;
-	int day = (int)sec/(60*60*24);
-	long long tDiffMs = 1000*sec + msec/1000;
-	sec = sec%60; 
-	printf("Elapsed Time : %02dD %02dH %02dM %02dS %03dmS\n", day, h, min, sec, msec);
-	if(tDiffMs != 0)
-	{
-		double tRate = (double)1000.*nEvt/tDiffMs;
-		if(tRate > 100)
-			printf("Trigger Rate : %3.3f kHz\n", tRate/1000);
-		else
-			printf("Trigger Rate : %2.2f Hz\n", tRate);
+	seconds elapsed_time = daq_end-daq_start;
+	int elapsedtime=elapsed_time.count();
+	if(elapsedtime!=0){
+		double freq = event_counter/elapsedtime;
+		cout<<"DAQ Frequency : "<<freq<<" Hz"<<endl;
+		cout<<"Elapsed time : "<<elapsedtime<<" seconds"<<endl;
+	}
+	else{
+		cout<<"DAQ time less than 1 s!"<<endl;
 	}
 }

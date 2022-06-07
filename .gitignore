@@ -2,3 +2,6 @@
 *.root
 *.bin
 *.exe
+*.swp
+dats/*
+!dats/Decode.cc
