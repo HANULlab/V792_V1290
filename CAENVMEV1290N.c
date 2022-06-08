@@ -23,7 +23,7 @@ unsigned short opcode[10];
 using namespace std;
 
 int CAENVMEV1290N::WriteMICRORegister(int nw, unsigned short* data){
-	int timeout = 3000,timecnt=0;
+	int timeout = 3000,timecnt=0;//V1290 MICRORegister is VERY SLOW. You could really need 3 s to ensure opperation.
 	unsigned short hs;
 	for(int i=0;i<nw;i++){
 		do{
